@@ -16,7 +16,6 @@ selector:
     - jstests/sharding/query/**/*[aA]uth*.js
 
     - jstests/sharding/advance_cluster_time_action_type.js
-    - jstests/sharding/client_disconnect_during_sign_logical_time.js
     - jstests/sharding/query/agg/agg_currentop.js
     - jstests/sharding/internal_txns/internal_client_restrictions.js
     - jstests/sharding/kill_sessions.js

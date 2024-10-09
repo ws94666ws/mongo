@@ -41,10 +41,6 @@ selector:
     - jstests/change_streams/apply_ops.js
     - jstests/change_streams/lookup_pit_pre_and_post_image_in_transaction.js
 
-    ##
-    # This test uses 'system' database and tenant token cannot be injected in 'system.$cmd' namespace.
-    - jstests/change_streams/global_index.js
-
     # Queryable encryption test requires an internal connection for the keyvault that does not
     # inject tenant token.
     - jstests/change_streams/queryable_encryption_change_stream.js
@@ -85,8 +81,10 @@ executor:
     - class: CheckReplDBHash
     - class: RunQueryStats
     - class: ValidateCollections
+      use_legacy_validate: true
     - class: CleanEveryN
       n: 20
+      skip_database_deletion: true
     - class: EnableChangeStream
       tenant_id: "636d957b2646ddfaf9b5e13f"
   fixture:

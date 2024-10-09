@@ -7,11 +7,14 @@
  * ]
  */
 import {RollbackTest} from "jstests/replsets/libs/rollback_test.js";
+import {TwoPhaseDropCollectionTest} from "jstests/replsets/libs/two_phase_drops.js";
 
-// Returns list of collections in database.
+// Returns list of collections in database, including pending drops.
 // Assumes all collections fit in first batch of results.
 function listCollections(database) {
-    return assert.commandWorked(database.runCommand({listCollections: 1})).cursor.firstBatch;
+    return assert
+        .commandWorked(database.runCommand({listCollections: 1, includePendingDrops: true}))
+        .cursor.firstBatch;
 }
 
 // Operations that will be present on both nodes, before the common point.
@@ -30,6 +33,7 @@ let CommonOps = (node) => {
     const collToDrop = mydb.getCollection(replicatedDropCollName);
     assert.commandWorked(mydb.createCollection(collToDrop.getName()));
     assert(collToDrop.drop());
+    TwoPhaseDropCollectionTest.waitForDropToComplete(mydb, replicatedDropCollName);
 
     // This collection will be dropped during a rename.
     const renameTargetColl = node.getCollection(renameTargetCollName);

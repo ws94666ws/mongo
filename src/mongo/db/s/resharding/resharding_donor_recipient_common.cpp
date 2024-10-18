@@ -70,6 +70,7 @@
 #include "mongo/s/chunk_version.h"
 #include "mongo/s/grid.h"
 #include "mongo/s/resharding/common_types_gen.h"
+#include "mongo/s/resharding/resharding_feature_flag_gen.h"
 #include "mongo/s/shard_key_pattern.h"
 #include "mongo/s/sharding_state.h"
 #include "mongo/stdx/unordered_set.h"
@@ -230,7 +231,8 @@ void processReshardingFieldsForRecipientCollection(OperationContext* opCtx,
                                                                   RecipientStateMachine,
                                                                   ReshardingRecipientDocument>(
             opCtx, reshardingFields.getReshardingUUID())) {
-        recipientStateMachine->get()->onReshardingFieldsChanges(opCtx, reshardingFields);
+        recipientStateMachine->get()->onReshardingFieldsChanges(
+            opCtx, reshardingFields, !metadata.currentShardHasAnyChunks() /* noChunksToCopy */);
         return;
     }
 
@@ -364,6 +366,11 @@ ReshardingRecipientDocument constructRecipientDocumentFromReshardingFields(
     recipientDoc.setMetrics(std::move(metrics));
 
     recipientDoc.setCommonReshardingMetadata(std::move(commonMetadata));
+    const bool skipCloningAndApplying =
+        resharding::gFeatureFlagReshardingSkipCloningAndApplyingIfApplicable.isEnabled(
+            serverGlobalParams.featureCompatibility.acquireFCVSnapshot()) &&
+        !metadata.currentShardHasAnyChunks();
+    recipientDoc.setSkipCloningAndApplying(skipCloningAndApplying);
 
     recipientDoc.setOplogBatchTaskCount(recipientFields->getOplogBatchTaskCount());
 

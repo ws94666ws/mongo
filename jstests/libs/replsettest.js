@@ -488,23 +488,30 @@ export class ReplSetTest {
     awaitSecondaryNodes(timeout, secondaries, retryIntervalMS, waitForNewlyAddedRemoval) {
         timeout = timeout || this.kDefaultTimeoutMS;
         retryIntervalMS = retryIntervalMS || 200;
+        let awaitingSecondaries;
+        try {
+            assert.soonNoExcept(() => {
+                awaitingSecondaries = [];
+                // Reload who the current secondaries are
+                this.getPrimary(timeout);
 
-        assert.soonNoExcept(() => {
-            // Reload who the current secondaries are
-            this.getPrimary(timeout);
+                var secondariesToCheck = secondaries || this._secondaries;
+                var len = secondariesToCheck.length;
+                for (var i = 0; i < len; i++) {
+                    var hello = secondariesToCheck[i].getDB('admin')._helloOrLegacyHello();
+                    var arbiter = (hello.arbiterOnly === undefined ? false : hello.arbiterOnly);
+                    if (!hello.secondary && !arbiter) {
+                        awaitingSecondaries.push(secondariesToCheck[i]);
+                    }
+                }
 
-            var secondariesToCheck = secondaries || this._secondaries;
-            var len = secondariesToCheck.length;
-            var ready = true;
-
-            for (var i = 0; i < len; i++) {
-                var hello = secondariesToCheck[i].getDB('admin')._helloOrLegacyHello();
-                var arbiter = (hello.arbiterOnly === undefined ? false : hello.arbiterOnly);
-                ready = ready && (hello.secondary || arbiter);
-            }
-
-            return ready;
-        }, "Awaiting secondaries", timeout, retryIntervalMS);
+                return awaitingSecondaries.length == 0;
+            }, "Awaiting secondaries: awaitingSecondariesPlaceholder", timeout, retryIntervalMS);
+        } catch (e) {
+            e.message = e.message.replace('awaitingSecondariesPlaceholder',
+                                          tojson(awaitingSecondaries.map((n) => n.name)));
+            throw e;
+        }
 
         // We can only wait for newlyAdded field removal if test commands are enabled.
         if (waitForNewlyAddedRemoval && jsTest.options().enableTestCommands) {
@@ -1211,15 +1218,6 @@ export class ReplSetTest {
              jsTest.options().useRandomBinVersionsWithinReplicaSet == 'last-continuous') &&
             !this.isConfigServer;
 
-        if ((setLastLTSFCV || setLastContinuousFCV) &&
-            jsTest.options().replSetFeatureCompatibilityVersion) {
-            const fcv = setLastLTSFCV ? lastLTSFCV : lastContinuousFCV;
-            throw new Error(
-                "The FCV will be set to '" + fcv + "' automatically when starting up a replica " +
-                "set with mixed binary versions. Therefore, we expect an empty value for " +
-                "'replSetFeatureCompatibilityVersion'.");
-        }
-
         if (setLastLTSFCV || setLastContinuousFCV) {
             // Authenticate before running the command.
             asCluster(this, this.nodes, () => {
@@ -1389,22 +1387,6 @@ export class ReplSetTest {
             print("Running awaitHighestPriorityNodeIsPrimary() during ReplSetTest initialization " +
                   "failed with Unauthorized error, proceeding even though we aren't guaranteed " +
                   "that the highest priority node is primary");
-        }
-
-        // Set 'featureCompatibilityVersion' for the entire replica set, if specified.
-        if (jsTest.options().replSetFeatureCompatibilityVersion) {
-            // Authenticate before running the command.
-            asCluster(this, this.nodes, () => {
-                let fcv = jsTest.options().replSetFeatureCompatibilityVersion;
-                print("Setting feature compatibility version for replica set to '" + fcv + "'");
-                assert.commandWorked(this.getPrimary().adminCommand(
-                    {setFeatureCompatibilityVersion: fcv, confirm: true}));
-
-                // Wait for the new 'featureCompatibilityVersion' to propagate to all nodes in the
-                // replica set. The 'setFeatureCompatibilityVersion' command only waits for
-                // replication to a majority of nodes by default.
-                this.awaitReplication();
-            });
         }
 
         // We need to disable the enableDefaultWriteConcernUpdatesForInitiate parameter

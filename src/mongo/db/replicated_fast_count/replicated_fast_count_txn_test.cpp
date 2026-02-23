@@ -95,7 +95,6 @@ protected:
 
     void tearDown() override {
         if (_fastCountManager) {
-            _fastCountManager->shutdown();
             _fastCountManager = nullptr;
         }
         MockReplCoordServerFixture::tearDown();

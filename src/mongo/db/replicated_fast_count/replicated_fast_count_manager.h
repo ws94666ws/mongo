@@ -39,7 +39,7 @@
 #include "mongo/db/shard_role/shard_catalog/collection.h"
 #include "mongo/db/shard_role/shard_role.h"
 #include "mongo/db/storage/snapshot.h"
-#include "mongo/platform/atomic_word.h"
+#include "mongo/platform/atomic.h"
 #include "mongo/stdx/mutex.h"
 #include "mongo/stdx/thread.h"
 #include "mongo/util/assert_util.h"
@@ -86,6 +86,8 @@ class MONGO_MOD_PUBLIC ReplicatedFastCountManager {
         bool dirty{false};  // Indicates if flush is needed.
     };
 
+    using FastSizeCountMap = absl::flat_hash_map<UUID, StoredSizeCount>;
+
 public:
     static ReplicatedFastCountManager& get(ServiceContext* svcCtx);
 
@@ -106,7 +108,8 @@ public:
     inline static StringData kCountKey = "c"_sd;
 
     /**
-     * Signals fastcount thread to start.
+     * Spawns fastcount thread.
+     * Skips running thread when _isUnderTest.
      */
     void startup(OperationContext* opCtx);
 
@@ -129,10 +132,10 @@ public:
 
     /**
      * Signals background thread to perform a flush.
-     * This flush involves snapshotting and writing dirty in-memory SizeCounts
-     * to the internal fastcount collection on disk.
+     * This flush involves snapshotting and writing dirty in-memory SizeCounts to the internal
+     * fastcount collection on disk.
      */
-    void flushAsync(OperationContext* opCtx);
+    void flushAsync();
 
     /**
      * Flushes data synchronously on the caller's thread. Calling thread must be able
@@ -147,23 +150,32 @@ public:
     void disablePeriodicWrites_ForTest();
 
 private:
-    void _snapshotAndFlush(OperationContext* opCtx);
+    void _acquireAndFlush(OperationContext* opCtx, const FastSizeCountMap& dirtyMetadata);
 
     /**
      * Return a copy of a subset of _metadata, only including the dirty entries. Clears the dirty
      * flags for all currently dirty entries.
      */
-    absl::flat_hash_map<UUID, StoredSizeCount> _getSnapshotOfDirtyMetadata();
+    FastSizeCountMap _getAndClearSnapshotOfDirtyMetadata(WithLock metadataLock);
 
     /**
      * Write out dirtyMetadata to fastCountColl.
      */
     void _doFlush(OperationContext* opCtx,
                   const CollectionPtr& fastCountColl,
-                  const absl::flat_hash_map<UUID, StoredSizeCount>& dirtyMetadata);
+                  const FastSizeCountMap& dirtyMetadata);
 
+    /**
+     * Runs background thread, performing final flush.
+     */
     void _startBackgroundThread(ServiceContext* svcCtx);
-    void _runBackgroundThreadOnTimer(OperationContext* opCtx);
+
+    /**
+     * Flushes dirty metadata when signalled.
+     * Sleeps on a condition variable - _backgroundThreadReadyForFlush - waiting for _flushRequested
+     * to be true.
+     */
+    void _flushPeriodicallyOnSignal(OperationContext* opCtx);
 
     /**
      * Write one collection's sizeCount to disk.
@@ -206,17 +218,17 @@ private:
 
     StringData _threadName = "replicatedSizeCount"_sd;
     stdx::thread _backgroundThread;
-    bool _writeMetadataPeriodically = true;
-    AtomicWord<bool> _isDisabled = false;
+    Atomic<bool> _isEnabled = false;
     stdx::condition_variable _backgroundThreadReadyForFlush;
+    bool _isUnderTest = false;  // Used to force synchronous writes in tests.
 
     /**
      * In-memory cache of committed fast sizes & counts since last checkpoint.
      * Implemented as a map of collection UUID to the last committed size and count.
      */
-    absl::flat_hash_map<UUID, StoredSizeCount> _metadata;
     mutable stdx::mutex _metadataMutex;
+    FastSizeCountMap _metadata;
+    bool _flushRequested = false;  // Prevents spurious wakeups.
 };
 
 }  // namespace mongo
-

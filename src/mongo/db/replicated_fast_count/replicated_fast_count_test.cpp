@@ -93,7 +93,6 @@ protected:
      */
     void shutdownFastCountManager() {
         if (_fastCountManager != nullptr) {
-            _fastCountManager->shutdown();
             _fastCountManager = nullptr;
         }
     }
@@ -460,8 +459,6 @@ TEST_F(ReplicatedFastCountTest, MixedUpdatesAndInsertInApplyOps) {
 TEST_F(ReplicatedFastCountTest, StartupFailsIfFastCountCollectionNotPresent) {
     RAIIServerParameterControllerForTest featureFlag("featureFlagReplicatedFastCount", true);
 
-    _fastCountManager->shutdown();
-
     {
         repl::UnreplicatedWritesBlock uwb(_opCtx);
         ASSERT_OK(storageInterface()->dropCollection(
@@ -475,8 +472,6 @@ TEST_F(ReplicatedFastCountTest, StartupFailsIfFastCountCollectionNotPresent) {
 
 TEST_F(ReplicatedFastCountTest, StartupInitializesMetadataFromExistingInternalCollection) {
     RAIIServerParameterControllerForTest featureFlag("featureFlagReplicatedFastCount", true);
-
-    _fastCountManager->shutdown();
 
     // Pre-populate the internal replicated fast count collection with two entries.
     UUID uuid1 = UUID::gen();

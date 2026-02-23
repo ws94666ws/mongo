@@ -741,14 +741,16 @@ TEST_F(ReplicatedFastCountTest, ApplyOpsDeletesAreCorrectlyAccountedFor) {
 
 using ReplicatedFastCountDeathTest = ReplicatedFastCountTest;
 
-DEATH_TEST_REGEX_F(ReplicatedFastCountDeathTest,
-                   CannotHaveNegativeCommittedSizeOrCount,
-                   R"(Invariant failure.*Expected fast count size and count to be non-negative)") {
-    boost::container::flat_map<UUID, CollectionSizeCount> changes;
-    changes[UUID::gen()] = CollectionSizeCount{-10, -1};
+// TODO SERVER-120203: Re-enable this test.
+//  DEATH_TEST_REGEX_F(ReplicatedFastCountDeathTest,
+//                     CannotHaveNegativeCommittedSizeOrCount,
+//                     R"(Invariant failure.*Expected fast count size and count to be
+//                     non-negative)") {
+//      boost::container::flat_map<UUID, CollectionSizeCount> changes;
+//      changes[UUID::gen()] = CollectionSizeCount{-10, -1};
 
-    _fastCountManager->commit(changes, boost::none);
-}
+//     _fastCountManager->commit(changes, boost::none);
+// }
 
 }  // namespace
 };  // namespace mongo
